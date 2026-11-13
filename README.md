@@ -14,6 +14,10 @@ The project has two parts that work together:
 No extra integration is needed in Home Assistant: the card talks to the device
 through a normal ESPHome action.
 
+| Painting | Effects | Presets |
+| --- | --- | --- |
+| ![Paint dialog with a serpentine strip, tools and colour palette](docs/dialog.png) | ![Effect menu opened over the dialog](docs/effects.png) | ![Preset gallery with gradient previews](docs/presets.png) |
+
 ## How it works
 
 1. The card averages what you paint down to one colour per zone and calls the
