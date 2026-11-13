@@ -1,0 +1,63 @@
+# Minimal ESPHome device using led_painter.
+# Only the parts that matter for painting are shown; add your own board,
+# wifi, ota and so on.
+
+external_components:
+  - source: github://matiserv/esphome-led-painter
+    components: [led_painter]
+
+# Keeps the painted frame and reports the LED count to Home Assistant.
+led_painter:
+  id: painter
+  # restore: true            # keep the last painting across reboots (default)
+  # zones:
+  #   name: "Painter zones"  # diagnostic sensor with the LED count (default name)
+
+api:
+  actions:
+    # Home Assistant sends one rrggbb triplet per zone; the frame is stretched
+    # over the whole strip, so any number of triplets works.
+    - action: paint
+      variables:
+        colors: string
+      then:
+        - lambda: id(painter).set_hex(colors.c_str(), colors.size());
+
+light:
+  - platform: esp32_rmt_led_strip   # any addressable light platform
+    id: strip
+    name: "LED strip"
+    pin: GPIO2
+    num_leds: 60
+    chipset: WS2812
+    rgb_order: GRB
+    effects:
+      - led_painter:
+          # name: "Paint"    # effect name shown in Home Assistant (default)
+          # reverse: false   # paint from the other end of the strip
+      - addressable_rainbow:
+
+    # ---- Optional: remember the last effect across off/on -----------------
+    # ESPHome clears the effect when a light turns off. This brings it back.
+    on_turn_on:
+      - lambda: |-
+          if (id(last_effect) != "None" && std::string(id(strip).get_effect_name().c_str()) == "None") {
+            auto call = id(strip).turn_on();
+            call.set_effect(id(last_effect));
+            call.perform();
+          }
+
+globals:
+  - id: last_effect
+    type: std::string
+    restore_value: yes
+    max_restore_data_length: 32
+    initial_value: '"None"'
+
+interval:
+  - interval: 5s
+    then:
+      - lambda: |-
+          if (!id(strip).remote_values.is_on()) return;
+          std::string cur = id(strip).get_effect_name().c_str();
+          if (cur != id(last_effect)) id(last_effect) = cur;

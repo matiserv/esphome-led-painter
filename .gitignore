@@ -1,0 +1,7 @@
+.claude/
+__pycache__/
+*.pyc
+.esphome/
+secrets.yaml
+.DS_Store
+Thumbs.db

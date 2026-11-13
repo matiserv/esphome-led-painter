@@ -1,0 +1,76 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>led-painter-card test</title>
+<!--
+  Development harness: the card with a fake Home Assistant.
+  Serve the repository root with any static web server and open /test/.
+  Add #pl for Polish, #dialog for the dialog layout, #group for a two-light group.
+-->
+<style>
+  body{margin:0;padding:16px;background:#111;font-family:Roboto,Arial,sans-serif;
+    --primary-color:#03a9f4;--primary-text-color:#e1e1e1;--secondary-text-color:#9b9b9b;
+    --divider-color:rgba(225,225,225,.12);--card-background-color:#1c1c1c}
+  ha-card{display:block;background:var(--card-background-color);border-radius:12px;color:var(--primary-text-color)}
+  #host{max-width:480px}
+  pre{color:#9b9b9b;font-size:11px;white-space:pre-wrap;word-break:break-all}
+</style>
+<div id="host"></div>
+<pre id="log"></pre>
+<script>
+  customElements.define('ha-card', class extends HTMLElement {});
+  customElements.define('ha-icon', class extends HTMLElement {
+    connectedCallback() { this.style.cssText = 'display:inline-block;width:18px;height:18px;border-radius:4px;background:currentColor;opacity:.5'; }
+  });
+</script>
+<script type="module">
+  import '../dist/led-painter-card.js';
+
+  const flags = location.hash;
+  const calls = window.calls = [];
+  const light = (name, effect) => ({ state: 'on', attributes: { friendly_name: name, brightness: 255, rgb_color: [255, 120, 0],
+    effect, effect_list: ['None', 'Paint', 'Rainbow', 'Breathe', 'Wave'] } });
+  const states = {
+    'light.desk_strip': light('Desk strip', 'Rainbow'),
+    'light.shelf_strip': light('Shelf strip', 'Rainbow'),
+    'sensor.desk_painter_zones': { state: '28', attributes: {} },
+    'sensor.shelf_painter_zones': { state: '60', attributes: {} },
+    'light.all_strips': { state: 'on', attributes: { friendly_name: 'All strips', brightness: 255, effect: 'Rainbow',
+      effect_list: ['None', 'Paint', 'Rainbow'], entity_id: ['light.desk_strip', 'light.shelf_strip'] } },
+  };
+  const entity = flags.includes('group') ? 'light.all_strips' : 'light.desk_strip';
+  const members = entity === 'light.all_strips' ? states[entity].attributes.entity_id : [entity];
+  const card = document.createElement('led-painter-card');
+  const hass = {
+    language: flags.includes('pl') ? 'pl' : 'en',
+    states,
+    entities: {
+      'light.desk_strip': { device_id: 'd1' }, 'sensor.desk_painter_zones': { device_id: 'd1' },
+      'light.shelf_strip': { device_id: 'd2' }, 'sensor.shelf_painter_zones': { device_id: 'd2' },
+    },
+    devices: { d1: { name: 'Desk' }, d2: { name: 'Shelf' } },
+    services: { esphome: { desk_paint: {}, shelf_paint: {} } },
+    callWS: async () => ({ value: null }),
+    callService: async (domain, service, data) => {
+      calls.push([domain, service, data]);
+      document.getElementById('log').textContent = calls.slice(-4).map((c) => c[0] + '.' + c[1] + ' ' + JSON.stringify(c[2]).slice(0, 150)).join('\n');
+      if (domain === 'light') {
+        const ids = [data.entity_id].concat(data.entity_id === entity ? members : []);
+        ids.forEach((id) => {
+          const st = states[id]; if (!st) return;
+          st.state = service === 'turn_off' ? 'off' : 'on';
+          if (data.effect) st.attributes.effect = data.effect;
+          if (data.rgb_color) st.attributes.rgb_color = data.rgb_color;
+          if (data.brightness_pct) st.attributes.brightness = data.brightness_pct * 2.55;
+        });
+        if (entity === 'light.all_strips' && data.effect) states[entity].attributes.effect = data.effect;
+      }
+      card.hass = hass;
+    },
+  };
+  card.setConfig({ entity });
+  if (flags.includes('dialog')) card.setAttribute('dialog', '');
+  document.getElementById('host').appendChild(card);
+  card.hass = hass;
+  window.card = card;
+</script>
